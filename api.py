@@ -14,7 +14,7 @@ def get_kundli():
         tob = data.get('tob') 
         place = data.get('place') 
         
-        # 1. Location
+        # 1. Location Fetch
         location = geolocator.geocode(place)
         if not location:
             return jsonify({"status": "error", "message": "Shahar ka naam nahi mila."})
@@ -34,9 +34,16 @@ def get_kundli():
         swe.set_sid_mode(swe.SIDM_LAHIRI)
         jd = swe.julday(year, month, day, hour_utc + (minute_utc/60.0))
         
-        # 4. Houses & Lagna
+        # ==========================================
+        # 🌟 VEDIC (SIDEREAL) MATH FIX
+        # ==========================================
+        ayanamsa = swe.get_ayanamsa_ut(jd)
+        sidereal_flag = swe.FLG_SWIEPH | swe.FLG_SIDEREAL # Ye flag Vedic result dega
+        
+        # 4. Houses & Lagna (Sidereal Lagna)
         cusps, ascmc = swe.houses(jd, lat, lon, b'P')
-        lagna_degree = ascmc[0]
+        lagna_degree = (ascmc[0] - ayanamsa) % 360 # Tropical Lagna ko Vedic banaya
+        
         zodiacs = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
         
         lagna_index = int(lagna_degree / 30)
@@ -53,11 +60,12 @@ def get_kundli():
         moon_absolute_degree = 0
         
         for p_name, p_code in planets.items():
-            pos, _ = swe.calc_ut(jd, p_code)
+            # Yahan 'sidereal_flag' daalna zaroori tha
+            pos, _ = swe.calc_ut(jd, p_code, sidereal_flag) 
             degree = pos[0]
             
             if p_code == swe.MOON:
-                moon_absolute_degree = degree # Dasha ke liye save kiya
+                moon_absolute_degree = degree
                 
             sign_index = int(degree / 30)
             sign = zodiacs[sign_index]
