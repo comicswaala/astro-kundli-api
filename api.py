@@ -38,11 +38,11 @@ def get_kundli():
         # 🌟 VEDIC (SIDEREAL) MATH FIX
         # ==========================================
         ayanamsa = swe.get_ayanamsa_ut(jd)
-        sidereal_flag = swe.FLG_SWIEPH | swe.FLG_SIDEREAL # Ye flag Vedic result dega
+        sidereal_flag = swe.FLG_SWIEPH | swe.FLG_SIDEREAL 
         
         # 4. Houses & Lagna (Sidereal Lagna)
         cusps, ascmc = swe.houses(jd, lat, lon, b'P')
-        lagna_degree = (ascmc[0] - ayanamsa) % 360 # Tropical Lagna ko Vedic banaya
+        lagna_degree = (ascmc[0] - ayanamsa) % 360 
         
         zodiacs = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
         
@@ -60,7 +60,6 @@ def get_kundli():
         moon_absolute_degree = 0
         
         for p_name, p_code in planets.items():
-            # Yahan 'sidereal_flag' daalna zaroori tha
             pos, _ = swe.calc_ut(jd, p_code, sidereal_flag) 
             degree = pos[0]
             
@@ -80,7 +79,7 @@ def get_kundli():
             kundli_data["Planets"][p_name] = {"sign": sign, "degree": round(degree % 30, 2), "house": house}
             
         # ==========================================
-        # 🌟 VIMSHOTTARI DASHA ENGINE
+        # 🌟 VIMSHOTTARI DASHA ENGINE (MD, AD, PD)
         # ==========================================
         dasha_lords = ['Ketu', 'Shukra', 'Surya', 'Chandra', 'Mangal', 'Rahu', 'Guru', 'Shani', 'Budh']
         dasha_years = [7, 20, 6, 10, 7, 18, 16, 19, 17]
@@ -102,6 +101,7 @@ def get_kundli():
         
         current_md = ""
         current_ad = ""
+        current_pd = "" # Naya variable PD ke liye
         
         if years_lived < balance_years:
             current_md = birth_lord
@@ -112,6 +112,17 @@ def get_kundli():
                 ad_length = (lord_years * dasha_years[ad_idx]) / 120.0
                 if ad_y + ad_length > years_into_md:
                     current_ad = dasha_lords[ad_idx]
+                    
+                    # --- PRATAYANTARDASHA (PD) ADD KIYA ---
+                    years_into_ad = years_into_md - ad_y
+                    pd_y = 0
+                    for k in range(9):
+                        curr_pd_idx = (ad_idx + k) % 9
+                        pd_length = (lord_years * dasha_years[ad_idx] * dasha_years[curr_pd_idx]) / 14400.0
+                        if pd_y + pd_length > years_into_ad:
+                            current_pd = dasha_lords[curr_pd_idx]
+                            break
+                        pd_y += pd_length
                     break
                 ad_y += ad_length
                 ad_idx = (ad_idx + 1) % 9
@@ -128,6 +139,17 @@ def get_kundli():
                         ad_length = (dasha_years[idx] * dasha_years[ad_idx]) / 120.0
                         if ad_y + ad_length > years_into_md:
                             current_ad = dasha_lords[ad_idx]
+                            
+                            # --- PRATAYANTARDASHA (PD) ADD KIYA ---
+                            years_into_ad = years_into_md - ad_y
+                            pd_y = 0
+                            for k in range(9):
+                                curr_pd_idx = (ad_idx + k) % 9
+                                pd_length = (dasha_years[idx] * dasha_years[ad_idx] * dasha_years[curr_pd_idx]) / 14400.0
+                                if pd_y + pd_length > years_into_ad:
+                                    current_pd = dasha_lords[curr_pd_idx]
+                                    break
+                                pd_y += pd_length
                             break
                         ad_y += ad_length
                         ad_idx = (ad_idx + 1) % 9
@@ -135,7 +157,11 @@ def get_kundli():
                 y += dasha_years[idx]
                 idx = (idx + 1) % 9
                 
-        kundli_data['Vimshottari'] = {"Mahadasha": current_md, "Antardasha": current_ad}
+        kundli_data['Vimshottari'] = {
+            "Mahadasha": current_md, 
+            "Antardasha": current_ad,
+            "Pratayantardasha": current_pd # Result me PD joda
+        }
 
         return jsonify({"status": "success", "kundli": kundli_data})
 
