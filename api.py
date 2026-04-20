@@ -30,23 +30,29 @@ def get_kundli():
         year, month, day = utc_time.year, utc_time.month, utc_time.day
         hour_utc, minute_utc = utc_time.hour, utc_time.minute
             
-        # 3. Swiss Ephemeris Setup (Vedic Mode)
+        # 3. Swiss Ephemeris Setup
         swe.set_sid_mode(swe.SIDM_LAHIRI)
         jd = swe.julday(year, month, day, hour_utc + (minute_utc/60.0))
-        ayanamsa = swe.get_ayanamsa_ut(jd)
-        sidereal_flag = swe.FLG_SWIEPH | swe.FLG_SIDEREAL
         
-        # 4. Houses & Lagna (Sidereal)
+        # ==========================================
+        # 🌟 VEDIC (SIDEREAL) MATH FIX
+        # ==========================================
+        ayanamsa = swe.get_ayanamsa_ut(jd)
+        sidereal_flag = swe.FLG_SWIEPH | swe.FLG_SIDEREAL # Ye flag Vedic result dega
+        
+        # 4. Houses & Lagna (Sidereal Lagna)
         cusps, ascmc = swe.houses(jd, lat, lon, b'P')
-        lagna_degree = (ascmc[0] - ayanamsa) % 360
+        lagna_degree = (ascmc[0] - ayanamsa) % 360 # Tropical Lagna ko Vedic banaya
+        
         zodiacs = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
         
         lagna_index = int(lagna_degree / 30)
         lagna_sign = zodiacs[lagna_index]
         
         planets = {
-            "Surya": swe.SUN, "Chandra": swe.MOON, "Mangal": swe.MARS, 
-            "Budh": swe.MERCURY, "Guru": swe.JUPITER, "Shukra": swe.VENUS,
+            "Surya": swe.SUN, "Chandra": swe.MOON, 
+            "Mangal": swe.MARS, "Budh": swe.MERCURY,
+            "Guru": swe.JUPITER, "Shukra": swe.VENUS,
             "Shani": swe.SATURN, "Rahu": swe.TRUE_NODE
         }
         
@@ -54,67 +60,83 @@ def get_kundli():
         moon_absolute_degree = 0
         
         for p_name, p_code in planets.items():
+            # Yahan 'sidereal_flag' daalna zaroori tha
             pos, _ = swe.calc_ut(jd, p_code, sidereal_flag) 
             degree = pos[0]
-            if p_code == swe.MOON: moon_absolute_degree = degree
+            
+            if p_code == swe.MOON:
+                moon_absolute_degree = degree
                 
             sign_index = int(degree / 30)
             sign = zodiacs[sign_index]
             house = ((sign_index - lagna_index + 12) % 12) + 1
             
             if p_code == swe.TRUE_NODE:
-                k_deg = (degree + 180) % 360
-                k_s_idx = int(k_deg / 30)
-                kundli_data["Planets"]["Ketu"] = {"sign": zodiacs[k_s_idx], "degree": round(k_deg % 30, 2), "house": ((k_s_idx - lagna_index + 12) % 12) + 1}
+                ketu_deg = (degree + 180) % 360
+                ketu_sign_idx = int(ketu_deg / 30)
+                ketu_house = ((ketu_sign_idx - lagna_index + 12) % 12) + 1
+                kundli_data["Planets"]["Ketu"] = {"sign": zodiacs[ketu_sign_idx], "degree": round(ketu_deg % 30, 2), "house": ketu_house}
                 
             kundli_data["Planets"][p_name] = {"sign": sign, "degree": round(degree % 30, 2), "house": house}
             
-        # 5. Vimshottari Dasha Engine (MD, AD, PD)
-        d_lords = ['Ketu', 'Shukra', 'Surya', 'Chandra', 'Mangal', 'Rahu', 'Guru', 'Shani', 'Budh']
-        d_years = [7, 20, 6, 10, 7, 18, 16, 19, 17]
+        # ==========================================
+        # 🌟 VIMSHOTTARI DASHA ENGINE
+        # ==========================================
+        dasha_lords = ['Ketu', 'Shukra', 'Surya', 'Chandra', 'Mangal', 'Rahu', 'Guru', 'Shani', 'Budh']
+        dasha_years = [7, 20, 6, 10, 7, 18, 16, 19, 17]
         
-        n_passed = moon_absolute_degree / (360.0 / 27.0)
-        n_idx = int(n_passed)
-        n_frac = n_passed - n_idx
+        nakshatra_passed = moon_absolute_degree / (360.0 / 27.0)
+        nakshatra_idx = int(nakshatra_passed)
+        nakshatra_fraction = nakshatra_passed - nakshatra_idx
         
-        l_idx = n_idx % 9
-        balance = (1 - n_frac) * d_years[l_idx]
-        y_lived = (datetime.now() - ist_time).days / 365.25
+        lord_idx = nakshatra_idx % 9
+        birth_lord = dasha_lords[lord_idx]
+        lord_years = dasha_years[lord_idx]
         
-        curr_md = ""; curr_ad = ""; curr_pd = ""
+        years_passed_at_birth = nakshatra_fraction * lord_years
+        balance_years = lord_years - years_passed_at_birth
         
-        # Dasha Logic Loop
-        y_sum = balance - d_years[l_idx] 
-        found_md = False
-        for i in range(100):
-            idx = (l_idx + i) % 9
-            md_len = d_years[idx]
-            if y_sum + md_len > y_lived:
-                curr_md = d_lords[idx]
-                y_in_md = y_lived - y_sum
-                # Antardasha
-                ad_sum = 0
-                for j in range(9):
-                    ad_idx = (idx + j) % 9
-                    ad_len = (d_years[idx] * d_years[ad_idx]) / 120.0
-                    if ad_sum + ad_len > y_in_md:
-                        curr_ad = d_lords[ad_idx]
-                        y_in_ad = y_in_md - ad_sum
-                        # Pratayantardasha
-                        pd_sum = 0
-                        for k in range(9):
-                            pd_idx = (ad_idx + k) % 9
-                            pd_len = (d_years[idx] * d_years[ad_idx] * d_years[pd_idx]) / (120.0 * 120.0)
-                            if pd_sum + pd_len > y_in_ad:
-                                curr_pd = d_lords[pd_idx]
-                                break
-                            pd_sum += pd_len
-                        break
-                    ad_sum += ad_len
-                break
-            y_sum += md_len
+        now = datetime.now()
+        days_diff = (now - ist_time).days
+        years_lived = days_diff / 365.25
+        
+        current_md = ""
+        current_ad = ""
+        
+        if years_lived < balance_years:
+            current_md = birth_lord
+            years_into_md = years_lived + years_passed_at_birth
+            ad_idx = lord_idx
+            ad_y = 0
+            while True:
+                ad_length = (lord_years * dasha_years[ad_idx]) / 120.0
+                if ad_y + ad_length > years_into_md:
+                    current_ad = dasha_lords[ad_idx]
+                    break
+                ad_y += ad_length
+                ad_idx = (ad_idx + 1) % 9
+        else:
+            y = balance_years
+            idx = (lord_idx + 1) % 9
+            while True:
+                if y + dasha_years[idx] > years_lived:
+                    current_md = dasha_lords[idx]
+                    years_into_md = years_lived - y
+                    ad_y = 0
+                    ad_idx = idx
+                    while True:
+                        ad_length = (dasha_years[idx] * dasha_years[ad_idx]) / 120.0
+                        if ad_y + ad_length > years_into_md:
+                            current_ad = dasha_lords[ad_idx]
+                            break
+                        ad_y += ad_length
+                        ad_idx = (ad_idx + 1) % 9
+                    break
+                y += dasha_years[idx]
+                idx = (idx + 1) % 9
+                
+        kundli_data['Vimshottari'] = {"Mahadasha": current_md, "Antardasha": current_ad}
 
-        kundli_data['Vimshottari'] = {"Mahadasha": curr_md, "Antardasha": curr_ad, "Pratayantardasha": curr_pd}
         return jsonify({"status": "success", "kundli": kundli_data})
 
     except Exception as e:
